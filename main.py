@@ -1,9 +1,32 @@
 from datetime import datetime, date
 from flask import Flask, request, jsonify
-from google.cloud import firestore
+import requests
+import json
 
 app = Flask(__name__)
-db = firestore.Client()
+
+# URL RAW của Gist chứa dữ liệu máy
+# Ví dụ: https://gist.githubusercontent.com/USERNAME/ID/raw/machines.json
+GIST_RAW_URL = "https://YOUR_GIST_RAW_URL_HERE"   # TODO: sửa thành URL thật
+
+def load_machines_from_gist():
+    """
+    Đọc file JSON từ Gist:
+    {
+      "MA_MAY_1": { "status": "active", "expires_at": "2025-12-31", "note": "Khách A" },
+      "MA_MAY_2": { ... }
+    }
+    """
+    try:
+        r = requests.get(GIST_RAW_URL, timeout=10)
+        r.raise_for_status()
+        data = r.text.strip()
+        if not data:
+            return {}
+        return json.loads(data)
+    except Exception as e:
+        print(f"[GIST] Lỗi đọc Gist: {e}")
+        return {}
 
 def calc_remaining_days(expiry_str: str) -> int:
     # expiry_str: "YYYY-MM-DD"
@@ -17,26 +40,28 @@ def check_machine():
     machine_id = data.get("machine_id", "").strip().upper()
 
     if not machine_id:
-        return jsonify({"ok": False, "message": "Thiếu machine_id"}), 400
+        return jsonify({"ok": False, "message": "Thiếu machine_id", "remaining_days": 0}), 400
 
-    doc_ref = db.collection("machines").document(machine_id)
-    doc = doc_ref.get()
-    if not doc.exists:
+    machines = load_machines_from_gist()
+    lic = machines.get(machine_id)
+
+    if not lic:
         return jsonify({"ok": False, "message": "Máy này chưa được cấp phép", "remaining_days": 0}), 200
 
-    lic = doc.to_dict()
     status = lic.get("status", "active")
     if status != "active":
-        return jsonify({"ok": False, "message": f"License không ở trạng thái active ({status})", "remaining_days": 0}), 200
+        return jsonify({
+            "ok": False,
+            "message": f"License không ở trạng thái active ({status})",
+            "remaining_days": 0
+        }), 200
 
-    expires_at = lic.get("expires_at")  # "YYYY-MM-DD"
+    expires_at = lic.get("expires_at")
     if not expires_at:
         return jsonify({"ok": False, "message": "Thiếu expires_at", "remaining_days": 0}), 200
 
     remaining = calc_remaining_days(expires_at)
     if remaining < 0:
-        # có thể update status thành expired
-        doc_ref.update({"status": "expired"})
         return jsonify({"ok": False, "message": "License đã hết hạn", "remaining_days": 0}), 200
 
     return jsonify({
