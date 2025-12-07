@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 # URL RAW của Gist chứa dữ liệu máy
 # Ví dụ: https://gist.githubusercontent.com/USERNAME/ID/raw/machines.json
-GIST_RAW_URL = "https://YOUR_GIST_RAW_URL_HERE"   # TODO: sửa thành URL thật
+GIST_RAW_URL = "https://gist.github.com/hgkhuyen255/8a3b40053089341ad248e9f948e12237"   # TODO: sửa thành URL thật
 
 def load_machines_from_gist():
     """
